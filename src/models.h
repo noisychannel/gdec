@@ -51,7 +51,8 @@ map <string, vector<phrase>> TM (string filename, unsigned k) {
     sort(begin(v), end(v),
       [](phrase const &t1, phrase const &t2) {
         //TODO: Should probably be -ve logprob
-        return t1.logprob < t2.logprob;
+        // The -ve ensure descending order, instead of the default asc
+        return -1.0 * t1.logprob < -1.0 * t2.logprob;
       }
     );
     if (k > v.size()) {
@@ -74,7 +75,7 @@ class LM {
   public:
     LM(string lm_filename);
     vector<string> begin();
-    vector<string> end(vector<string> state);
+    double end(vector<string> state);
     pair<vector<string>, double> score(vector<string> state, string word);
 };
 
@@ -86,6 +87,7 @@ LM::LM(string lm_filename) {
     vector<string> entry;
     boost::split(entry, line, boost::is_any_of("\t"));
     if (entry.size() > 1 and entry[0] != "ngram") {
+      trim(entry);
       double logprob = stod(entry[0]);
       vector<string> ngram;
       boost::split(ngram, entry[1], boost::is_any_of(" "));
@@ -106,9 +108,38 @@ vector<string> LM::begin() {
 }
 
 pair<vector<string>, double> LM::score(vector<string> state, string word) {
-
+  // This copies the vector
+  vector<string> ngram = state;
+  ngram.push_back(word);
+  double score = 0.0;
+  while (ngram.size() > 0) {
+    map <const vector<string>, ngram_stats>::iterator it = table.find(ngram);
+    if (it == table.end()) {
+      //Backoff
+      if (ngram.size() > 1) {
+        vector<string> backoff_ngram;
+        for (unsigned i = 0; i < ngram.size() - 1; ++i) {
+          backoff_ngram.push_back(ngram[i]);
+        }
+        assert (table.find(backoff_ngram) != table.end());
+        score += table[backoff_ngram].backoff;
+      }
+      ngram.erase(ngram.begin(), ngram.begin() + 1);
+    }
+    else {
+        vector<string> new_state;
+        for (unsigned i = ngram.size() - 2; i < ngram.size(); ++i) {
+          new_state.push_back(ngram[i]);
+        }
+        return make_pair(new_state, score + it->second.logprob);
+    }
+  }
+  vector<string> unk_state;
+  unk_state.push_back("<unk>");
+  vector<string> empty_state;
+  return make_pair(empty_state, table[unk_state].logprob);
 }
 
-vector<string> LM::end(vector<string> state) {
-
+double LM::end(vector<string> state) {
+  return score(state, "</s>").second;
 }
