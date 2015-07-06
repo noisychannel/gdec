@@ -13,13 +13,12 @@ struct phrase {
   double logprob;
 };
 
-map <string, vector<phrase>> TM (string filename, unsigned k) {
+map <vector<string>, vector<phrase>> TM (string filename, unsigned k) {
   cerr << "Reading translation model from " << filename << " ..." << endl;
-  map <string, vector<phrase>> tm;
+  map <vector<string>, vector<phrase>> tm;
   // Read the translation table into memory
   ifstream tm_file(filename);
   string line, f, e;
-  double logprob;
   boost::regex tok_re("\\s\\|\\|\\|\\s");
   while (getline(tm_file, line)) {
     trim(line);
@@ -32,13 +31,15 @@ map <string, vector<phrase>> TM (string filename, unsigned k) {
     assert (tm_options.size() == 3);
     phrase newPhrase;
     f = tm_options[0];
+    vector<string> f_tokens;
+    boost::split(f_tokens, f, boost::is_any_of(" "));
     newPhrase.english = tm_options[1];
     newPhrase.logprob = stod(tm_options[2]);
-    map <string, vector<phrase>>::iterator it = tm.find(f);
+    map <vector<string>, vector<phrase>>::iterator it = tm.find(f_tokens);
     if (it == tm.end()) {
       vector<phrase> newOpt;
       newOpt.push_back(newPhrase);
-      tm.insert(pair<string, vector<phrase>>(f, newOpt));
+      tm.insert(pair<vector<string>, vector<phrase>>(f_tokens, newOpt));
     }
     else {
       it->second.push_back(newPhrase);
@@ -46,7 +47,7 @@ map <string, vector<phrase>> TM (string filename, unsigned k) {
   }
 
   // Prune and keep top k entries
-  for (map <string, vector<phrase>>::iterator it=tm.begin(); it!=tm.end(); ++it) {
+  for (map <vector<string>, vector<phrase>>::iterator it=tm.begin(); it!=tm.end(); ++it) {
     vector<phrase> v = it->second;
     sort(begin(v), end(v),
       [](phrase const &t1, phrase const &t2) {
@@ -55,7 +56,7 @@ map <string, vector<phrase>> TM (string filename, unsigned k) {
         return -1.0 * t1.logprob < -1.0 * t2.logprob;
       }
     );
-    if (k > v.size()) {
+    if (v.size() > k) {
       v.erase(v.begin() + k, v.end());
       assert (v.size() == k);
     }
@@ -87,7 +88,7 @@ LM::LM(string lm_filename) {
     vector<string> entry;
     boost::split(entry, line, boost::is_any_of("\t"));
     if (entry.size() > 1 and entry[0] != "ngram") {
-      trim(entry);
+      trim(entry[1]);
       double logprob = stod(entry[0]);
       vector<string> ngram;
       boost::split(ngram, entry[1], boost::is_any_of(" "));
